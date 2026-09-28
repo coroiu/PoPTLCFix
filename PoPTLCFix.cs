@@ -14,6 +14,9 @@ namespace PoPTLCFix
     {
         internal static new ManualLogSource Log;
 
+        // Features
+        public static ConfigEntry<bool> bSkipIntro;
+
         // Custom Resolution
         public static ConfigEntry<bool> bCustomRes;
         public static ConfigEntry<int> iCustomResX;
@@ -39,6 +42,12 @@ namespace PoPTLCFix
             // Plugin startup logic
             Log = base.Log;
             Log.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
+
+            // Skip Intro
+            bSkipIntro = Config.Bind("Intro Skip",
+                                "Enabled",
+                                true,
+                                "Skips Ubisoft intro video and splash screens.");
 
             // Custom Resolution
             bCustomRes = Config.Bind("Set Custom Resolution",
@@ -69,6 +78,11 @@ namespace PoPTLCFix
                                 "Spans gameplay HUD to the edges of the screen.");
 
             // Apply patches
+            if (bSkipIntro.Value)
+            {
+                Log.LogInfo($"Patches: Applying skip intro patch.");
+                Harmony.CreateAndPatchAll(typeof(SkipIntroPatch));
+            }
             if (bCustomRes.Value)
             {
                 windowMode = iWindowMode.Value switch
@@ -83,6 +97,40 @@ namespace PoPTLCFix
 
                 // Set resolution
                 UnityEngine.Screen.SetResolution(iCustomResX.Value, iCustomResY.Value, windowMode, 0);
+            }
+        }
+
+        [HarmonyPatch]
+        public class SkipIntroPatch
+        {
+            // Skip intro video
+            [HarmonyPatch(typeof(VideoPlayer), nameof(VideoPlayer.Prepare))]
+            [HarmonyPostfix]
+            public static void SkipIntroVideo(VideoPlayer __instance)
+            {
+                if (__instance.url.Contains("UBISOFTSWIRL"))
+                {
+                    if (Alkawa.GameSystems.Bootstrap.Instance && Alkawa.GameSystems.Bootstrap.Instance.m_volatileBootstrap)
+                    {
+                        Alkawa.GameSystems.Bootstrap.Instance.m_volatileBootstrap.m_isVideoFinished = true;
+                        Log.LogInfo("Skipped intro video.");
+                    }
+                }
+            }
+
+            // Skip timed intro screens
+            // GameFlow.PushState is wrapped by Denuvo in the current build, so instead of skipping the
+            // whole state we let each timed screen take the game's own "no duration" path (m_TimerMax < 0).
+            [HarmonyPatch(typeof(Alkawa.Gameplay.UIScreenWithDuration), nameof(Alkawa.Gameplay.UIScreenWithDuration.Init))]
+            [HarmonyPrefix]
+            public static void SkipIntroScreens(Alkawa.Gameplay.UIScreenWithDuration __instance)
+            {
+                var state = Alkawa.Engine.GameFlow.ActiveGameFlowState;
+                if (state == Alkawa.Engine.EGameFlowStateType.FirstMandatoryUIScreens)
+                {
+                    __instance.m_TimerMax = -1f;
+                    Log.LogInfo($"Skipped intro screen {(__instance.m_Canvas != null ? __instance.m_Canvas.name : "?")}.");
+                }
             }
         }
 

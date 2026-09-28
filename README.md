@@ -5,13 +5,23 @@
 
 This is a BepInEx plugin for Prince of Persia: The Lost Crown that adds custom resolutions, ultrawide/narrower support and more.<br />
 
+> [!NOTE]
+> **Fork of [Lyall/PoPTLCFix](https://github.com/Lyall/PoPTLCFix)** that fixes the random crashes from [#4](https://github.com/Lyall/PoPTLCFix/issues/4).
+> The current game build wraps `GameAssembly.dll` in Denuvo Anti-Tamper, and several functions upstream hooks
+> (`GameFlow.PushState`, `Volume.OnEnable`, `CanvasScaler.OnEnable`, `UIScreen.RequestStartScreen`) are Denuvo entry stubs.
+> Patching those causes silent, delayed crashes. This fork only hooks unprotected functions:
+> - The UI scaling and pillarboxing hooks moved to `CanvasScaler.HandleScaleWithScreenSize` and `UIScreen.Init`.
+> - Intro skip reimplemented via `UIScreenWithDuration.Init`; screens that wait for a button press are no longer skipped.
+> - Graphics tweaks (motion blur/vignette/chromatic aberration toggles) removed.
+> - Log flushing enabled so crashes leave a usable `LogOutput.log`.
+
 ## Features
 - Custom resolution support.
 - Ultrawide and narrower aspect ratio support.
-- Intro skip.
+- Intro skip (logo video and timed splash screens).
 
 ## Installation
-- Grab the latest release of PoPTLCFix from [here.](https://github.com/Lyall/PoPTLCFix/releases)
+- Grab the latest release of PoPTLCFix from [here.](https://github.com/coroiu/PoPTLCFix/releases)
 - Extract the contents of the release zip in to the the game folder. (e.g. "**steamapps\common\Prince of Persia The Lost Crown**" for Steam).
 - 🚩First boot of the game may take a few minutes as BepInEx generates an assembly cache!
 
