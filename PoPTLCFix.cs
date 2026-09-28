@@ -14,9 +14,6 @@ namespace PoPTLCFix
     {
         internal static new ManualLogSource Log;
 
-        // Features
-        public static ConfigEntry<bool> bSkipIntro;
-
         // Custom Resolution
         public static ConfigEntry<bool> bCustomRes;
         public static ConfigEntry<int> iCustomResX;
@@ -25,11 +22,6 @@ namespace PoPTLCFix
 
         // HUD
         public static ConfigEntry<bool> bSpanHUD;
-
-        // Graphics Tweaks
-        public static ConfigEntry<bool> bChromaticAberration;
-        public static ConfigEntry<bool> bMotionBlur;
-        public static ConfigEntry<bool> bVignette;
 
         // Aspect Ratio
         private const float fNativeAspect = (float)16 / 9;
@@ -47,12 +39,6 @@ namespace PoPTLCFix
             // Plugin startup logic
             Log = base.Log;
             Log.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
-
-            // Skip Intro
-            bSkipIntro = Config.Bind("Intro Skip",
-                                "Enabled",
-                                true,
-                                "Skips Ubisoft intro video and splash screens.");
 
             // Custom Resolution
             bCustomRes = Config.Bind("Set Custom Resolution",
@@ -82,27 +68,7 @@ namespace PoPTLCFix
                                 true,
                                 "Spans gameplay HUD to the edges of the screen.");
 
-            // Graphics tweaks
-            bChromaticAberration = Config.Bind("Graphical Tweaks",
-                                "DisableChromaticAberration",
-                                 false,
-                                "Set to true to disable chromatic aberration (color fringing).");
-
-            bMotionBlur = Config.Bind("Graphical Tweaks",
-                                "DisableMotionBlur",
-                                 true,
-                                "Set to true to disable motion blur.");
-
-            bVignette = Config.Bind("Graphical Tweaks",
-                                "DisableVignette",
-                                 true,
-                                "Set to true to disable vignetting (darkening at the edges of the screen).");
             // Apply patches
-            if (bSkipIntro.Value)
-            {
-                Log.LogInfo($"Patches: Applying skip intro patch.");
-                Harmony.CreateAndPatchAll(typeof(SkipIntroPatch));
-            }
             if (bCustomRes.Value)
             {
                 windowMode = iWindowMode.Value switch
@@ -117,81 +83,6 @@ namespace PoPTLCFix
 
                 // Set resolution
                 UnityEngine.Screen.SetResolution(iCustomResX.Value, iCustomResY.Value, windowMode, 0);
-            }
-            if (bChromaticAberration.Value || bMotionBlur.Value || bVignette.Value)
-            {
-                Harmony.CreateAndPatchAll(typeof(GraphicsPatch));
-                Log.LogInfo($"Patches: Applying graphics patch.");
-            }
-        }
-
-        [HarmonyPatch]
-        public class SkipIntroPatch
-        {
-            // Skip intro video
-            [HarmonyPatch(typeof(VideoPlayer), nameof(VideoPlayer.Prepare))]
-            [HarmonyPostfix]
-            public static void SkipIntroVideo(VideoPlayer __instance)
-            {
-                if (__instance.url.Contains("UBISOFTSWIRL"))
-                {
-                    if (Alkawa.GameSystems.Bootstrap.Instance && Alkawa.GameSystems.Bootstrap.Instance.m_volatileBootstrap)
-                    {
-                        Alkawa.GameSystems.Bootstrap.Instance.m_volatileBootstrap.m_isVideoFinished = true;
-                        Log.LogInfo("Skipped intro video.");
-                    }
-                }
-            }
-
-            // Skip intro screens
-            [HarmonyPatch(typeof(Alkawa.Engine.GameFlow), nameof(Alkawa.Engine.GameFlow.PushState))]
-            [HarmonyPrefix]
-            public static void SkipIntroScreens(ref Alkawa.Engine.EGameFlowStateType __0)
-            {
-                if (__0 == Alkawa.Engine.EGameFlowStateType.FirstMandatoryUIScreens)
-                {
-                    if (!Alkawa.Engine.GameFlowUtils.IsFTUE())
-                    {
-                        __0 = Alkawa.Engine.EGameFlowStateType.UbiServicesConnection;
-                        Log.LogInfo($"Skipping mandatory screens.");
-                    }
-                    else
-                    {
-                        __0 = Alkawa.Engine.EGameFlowStateType.TitleScreen;
-                        Log.LogInfo($"Skipping mandatory screens (FTUE).");
-                    }
-                }
-            }
-        }
-
-        [HarmonyPatch]
-        public class GraphicsPatch
-        {
-            // Adjust vignette
-            [HarmonyPatch(typeof(UnityEngine.Rendering.Volume), nameof(UnityEngine.Rendering.Volume.OnEnable))]
-            [HarmonyPostfix]
-            public static void PostProcessTweaks(UnityEngine.Rendering.Volume __instance)
-            {
-                __instance.profile.TryGet(out UnityEngine.Rendering.Universal.AlkawaChromaticAberration ca);
-                if (ca && bChromaticAberration.Value)
-                {
-                    Log.LogInfo($"Graphics Tweaks: Changed {__instance.gameObject.name}: Chromatic aberration from {ca.active} to False.");
-                    ca.active = false;
-                }
-
-                __instance.profile.TryGet(out UnityEngine.Rendering.Universal.MotionBlur motionBlur);
-                if (motionBlur && bMotionBlur.Value)
-                {
-                    Log.LogInfo($"Graphics Tweaks: Changed {__instance.gameObject.name}: Motion blur from {motionBlur.active} to False.");
-                    motionBlur.active = false;
-                }
-
-                __instance.profile.TryGet(out UnityEngine.Rendering.Universal.AlkawaVignette vignette);
-                if (vignette && bVignette.Value)
-                {
-                    Log.LogInfo($"Graphics Tweaks: Changed {__instance.gameObject.name}: Vignette from {vignette.active} to False.");
-                    vignette.active = false;
-                }
             }
         }
 
@@ -264,8 +155,9 @@ namespace PoPTLCFix
             }
 
             // Fix UI
-            [HarmonyPatch(typeof(CanvasScaler), nameof(CanvasScaler.OnEnable))]
-            [HarmonyPostfix]
+            // CanvasScaler.OnEnable is wrapped by Denuvo in the current build, hooking it causes delayed crashes.
+            [HarmonyPatch(typeof(CanvasScaler), nameof(CanvasScaler.HandleScaleWithScreenSize))]
+            [HarmonyPrefix]
             public static void FixUI(CanvasScaler __instance)
             {
                 if (fAspectRatio > fNativeAspect)
@@ -276,10 +168,16 @@ namespace PoPTLCFix
             }
 
             // Add pillarboxing for other screens
-            [HarmonyPatch(typeof(Alkawa.Gameplay.UIScreen), nameof(Alkawa.Gameplay.UIScreen.RequestStartScreen))]
+            // UIScreen.RequestStartScreen is wrapped by Denuvo in the current build, hooking it causes delayed crashes.
+            [HarmonyPatch(typeof(Alkawa.Gameplay.UIScreen), nameof(Alkawa.Gameplay.UIScreen.Init))]
             [HarmonyPostfix]
             public static void ScreenAddPillarboxing(Alkawa.Gameplay.UIScreen __instance)
             {
+                if (__instance.m_Canvas == null)
+                {
+                    return;
+                }
+
                 // Add pillarboxing
                 if (__instance.m_Canvas.gameObject.GetComponent<UnityEngine.UI.LayoutElement>() == null && __instance.m_Canvas.gameObject.GetComponent<UnityEngine.UI.ContentSizeFitter>() == null)
                 {
@@ -524,7 +422,7 @@ namespace PoPTLCFix
             [HarmonyPostfix]
             public static void PostVideoFix()
             {
-                if (Screen.currentResolution.width != iCustomResX.Value || Screen.currentResolution.width != iCustomResY.Value)
+                if (Screen.width != iCustomResX.Value || Screen.height != iCustomResY.Value)
                 {
                     Screen.SetResolution(iCustomResX.Value, iCustomResY.Value, windowMode, 0);
                     Log.LogInfo($"VideoController: Video ended.");

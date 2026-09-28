@@ -13,22 +13,20 @@ jobs:
     permissions:
       contents: write
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-dotnet@v1
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
       with: 
         dotnet-version: '6.0.x'
 
-    # Download BepInEx
-    - run: echo "::set-output name=URL::$(curl -vs https://builds.bepinex.dev/projects/bepinex_be 2>&1 | grep -Po '(?<=href=")(\/projects\/bepinex_be\/(.*)\/BepInEx-Unity.IL2CPP-win-x64(.*))(?=")' | head -1)"
-      id: bepinexurl
-    - run: wget https://builds.bepinex.dev${{ steps.bepinexurl.outputs.URL}}
+    # Download BepInEx (pinned to the build this fix was tested against)
+    - run: wget -O BepInEx-Unity.IL2CPP-win-x64.zip "https://builds.bepinex.dev/projects/bepinex_be/704/BepInEx-Unity.IL2CPP-win-x64-6.0.0-be.704%2B6b38cee.zip"
 
     - run: dotnet build -c Release -o build
 
     # Normal artifact
     - run: mkdir -p ${{ github.event.repository.name }}/reg/BepInEx/plugins; mkdir -p ${{ github.event.repository.name }}/reg/BepInEx/config
     - run: cp build/${{ github.event.repository.name }}.dll ${{ github.event.repository.name }}/reg/BepInEx/plugins/${{ github.event.repository.name }}.dll
-    - run: unzip BepInEx-Unity.IL2CPP-win-x64* -d ${{ github.event.repository.name }}/reg
+    - run: unzip BepInEx-Unity.IL2CPP-win-x64.zip -d ${{ github.event.repository.name }}/reg
     - run: chmod -R 775 ${{ github.event.repository.name }}/reg
     - run: cp .github/workflows/BepInEx.cfg ${{ github.event.repository.name }}/reg/BepInEx/config
     - run: cp .github/workflows/doorstop_config.ini ${{ github.event.repository.name }}/reg/
@@ -52,6 +50,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         tag: ${{ github.event.inputs.version }}
         name: "${{ github.event.inputs.version }}"
-        draft: true
+        draft: false
+        commit: ${{ github.sha }}
         generateReleaseNotes: true
         artifactErrorsFailBuild: true
